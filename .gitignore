@@ -1,0 +1,52 @@
+@"
+# Environment variables / secrets
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Frontend builds
+dist/
+dist-ssr/
+.vite/
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Backend uploaded files
+backend/uploads/*
+
+# Local databases / temporary files
+*.sqlite
+*.sqlite3
+*.db
+
+# Backup archives
+*.zip
+
+# Logs
+*.log
+
+# Secrets / certificates
+*.pem
+*.key
+"@ | Set-Content .\.gitignore
