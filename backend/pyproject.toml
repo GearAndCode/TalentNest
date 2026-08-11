@@ -4,6 +4,22 @@ version = "0.1.0"
 requires-python = "==3.12.*"
 dependencies = [
     "fastapi[standard]",
+    "uvicorn[standard]",
+    "sqlalchemy",
+    "psycopg2-binary",
+    "python-dotenv",
+    "alembic",
+    "python-jose",
+    "passlib",
+    "bcrypt",
+    "python-multipart",
+    "email-validator",
+    "google-generativeai",
+    "pypdf",
+    "sentence-transformers",
+    "scikit-learn",
+    "numpy",
+    "pandas",
 ]
 
 [tool.fastapi]
