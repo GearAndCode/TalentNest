@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import axios from 'axios';
 import { motion, AnimatePresence } from 'framer-motion';
+import API_BASE_URL from "../../services/api";
 import {
 LayoutDashboard,
 Briefcase,
@@ -152,8 +153,7 @@ const [aiModal, setAiModal] = useState({ isOpen: false, data: null });
 const [highlightedCandidateId, setHighlightedCandidateId] = useState(null);
 
 // Base API URL
-const API_BASE = 'http://127.0.0.1:8000';
-
+const API_BASE = API_BASE_URL;
 // Authenticate every HR request with the logged-in company's JWT.
 // The backend uses company_id from the signed token for tenant isolation.
 const api = axios.create({

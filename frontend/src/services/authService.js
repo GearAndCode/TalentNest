@@ -1,6 +1,7 @@
 import axios from "axios";
+import API_BASE_URL from "./api";
 
-const API = "http://127.0.0.1:8000";
+const API = API_BASE_URL;
 
 export const hrLogin = async (email, password) => {
   const formData = new URLSearchParams();

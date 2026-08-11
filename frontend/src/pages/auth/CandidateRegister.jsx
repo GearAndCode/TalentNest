@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
+import API_BASE_URL from "../../services/api";
 import axios from 'axios';
 import {
   ArrowLeft,
@@ -30,7 +31,7 @@ import {
   ChevronRight,
   LockKeyhole
 } from 'lucide-react';
-const API = "http://127.0.0.1:8000";
+const API = API_BASE_URL;
 export default function CandidateRegister() {
   const navigate = useNavigate();
 

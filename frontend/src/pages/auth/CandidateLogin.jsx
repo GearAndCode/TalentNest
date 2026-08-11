@@ -1,3 +1,4 @@
+import API_BASE_URL from "../../services/api";
 import React, { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { 
@@ -142,7 +143,7 @@ export default function CandidateLogin() {
     setIsLoading(true);
 
     try {
-      const response = await fetch('http://127.0.0.1:8000/candidate-auth/login', {
+      const response = await fetch('${API_BASE_URL}/candidate-auth/login', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -239,7 +240,7 @@ export default function CandidateLogin() {
             }
 
             const apiResponse = await fetch(
-              'http://127.0.0.1:8000/candidate-auth/google',
+              '${API_BASE_URL}/candidate-auth/google',
               {
                 method: 'POST',
                 headers: {
@@ -364,7 +365,7 @@ export default function CandidateLogin() {
 
     setForgotLoading(true);
     try {
-      const response = await fetch('http://127.0.0.1:8000/candidate-auth/forgot-password', {
+      const response = await fetch('${API_BASE_URL}/candidate-auth/forgot-password', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: forgotEmail.trim() }),
@@ -395,7 +396,7 @@ export default function CandidateLogin() {
 
     setForgotLoading(true);
     try {
-      const response = await fetch('http://127.0.0.1:8000/candidate-auth/verify-reset-otp', {
+      const response = await fetch('${API_BASE_URL}/candidate-auth/verify-reset-otp', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: forgotEmail.trim(), otp: resetOtp.trim() }),
@@ -430,7 +431,7 @@ export default function CandidateLogin() {
 
     setForgotLoading(true);
     try {
-      const response = await fetch('http://127.0.0.1:8000/candidate-auth/reset-password', {
+      const response = await fetch('${API_BASE_URL}/candidate-auth/reset-password', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: forgotEmail.trim(), new_password: newPassword }),

@@ -1,6 +1,7 @@
 import axios from "axios";
+import API_BASE_URL from "./api";
 
-const API = "http://127.0.0.1:8000";
+const API = API_BASE_URL;
 
 export const subscribeNewsletter = async (email) => {
   const response = await axios.post(`${API}/newsletter/subscribe`, {
