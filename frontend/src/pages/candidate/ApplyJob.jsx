@@ -7,20 +7,12 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000
 const api = axios.create({ baseURL: API_BASE_URL, headers: { "Content-Type": "application/json" } });
 
 api.interceptors.request.use((config) => {
-  const token =
-    localStorage.getItem("candidate_access_token") ||
-    sessionStorage.getItem("candidate_access_token") ||
-    localStorage.getItem("candidate_token") ||
-    sessionStorage.getItem("candidate_token");
+  const token = localStorage.getItem("candidate_token") || sessionStorage.getItem("candidate_token");
   if (token) config.headers.Authorization = `Bearer ${token}`;
   return config;
 });
 
 const SESSION_KEY = "candidate_session_email";
-
-function getStoredCandidateEmail() {
-  return localStorage.getItem(SESSION_KEY) || sessionStorage.getItem(SESSION_KEY) || "";
-}
 
 function getCandidateFromStorage() {
   for (const storage of [localStorage, sessionStorage]) {
@@ -52,7 +44,7 @@ export default function ApplyJob() {
 
         let active = getCandidateFromStorage();
         if (!active) {
-          const email = getStoredCandidateEmail();
+          const email = localStorage.getItem(SESSION_KEY) || sessionStorage.getItem(SESSION_KEY);
           if (email) {
             const candidatesRes = await api.get("/candidates");
             active = (candidatesRes.data || []).find(
@@ -71,18 +63,13 @@ export default function ApplyJob() {
 
   const submitApplication = async () => {
     if (!candidate?.id) {
-      navigate("/candidate-login", {
-        state: { returnTo: `/candidate/apply/${jobId}` },
-      });
+      navigate("/candidate-login", { state: { returnTo: `/candidate/apply/${jobId}` } });
       return;
     }
 
     setSubmitting(true);
     setError("");
     try {
-      if (!job?.id) {
-        throw new Error("Job information is missing. Please go back and open the job again.");
-      }
       await api.post("/applications/", {
         candidate_id: Number(candidate.id),
         job_id: Number(jobId),
@@ -90,14 +77,10 @@ export default function ApplyJob() {
       setSuccess(true);
     } catch (err) {
       const detail = err?.response?.data?.detail;
-      const message = Array.isArray(detail)
-        ? detail.map((item) => item?.msg || JSON.stringify(item)).join(", ")
-        : detail || err?.message || "We could not submit your application. Please try again.";
-
-      if (String(message).toLowerCase().includes("already applied")) {
+      if (detail === "Already applied.") {
         setSuccess(true);
       } else {
-        setError(message);
+        setError(detail || "We could not submit your application. Please try again.");
       }
     } finally {
       setSubmitting(false);
