@@ -94,17 +94,13 @@ def create_job(
     db: Session = Depends(get_db),
     company=Depends(get_current_company),
 ):
-    # Embedding generation calls an external service (OpenAI). A missing/
-    # invalid API key, quota error, or network hiccup must NOT prevent the
-    # job itself from being created — it should only skip semantic search
-    # support for that job. Without this guard, any embedding failure
-    # raised an unhandled exception here, before the job was ever added to
-    # the session, so nothing was written to the database.
     try:
         embedding = get_embedding(job.description)
-    except Exception as exc:
-        print(f"[create_job] embedding generation failed, continuing without it: {exc}")
-        embedding = None
+    except Exception:
+        raise HTTPException(
+            status_code=503,
+            detail="Could not generate the job embedding right now. Please try creating the job again.",
+        )
 
     new_job = Job(
         company_id=company.id,
@@ -117,16 +113,12 @@ def create_job(
         employment_type=job.employment_type,
         experience=job.experience,
         skills=json.dumps(job.skills) if job.skills else "[]",
-        embedding=json.dumps(embedding) if embedding is not None else None,
+        embedding=json.dumps(embedding),
     )
 
-    try:
-        db.add(new_job)
-        db.commit()
-        db.refresh(new_job)
-    except Exception:
-        db.rollback()
-        raise
+    db.add(new_job)
+    db.commit()
+    db.refresh(new_job)
 
     # Reload with the actual company relationship.
     new_job = (
@@ -272,17 +264,16 @@ def update_job(
     job.skills = json.dumps(updated_job.skills) if updated_job.skills else "[]"
 
     try:
-        new_embedding = get_embedding(updated_job.description)
-        job.embedding = json.dumps(new_embedding) if new_embedding is not None else None
-    except Exception as exc:
-        print(f"[update_job] embedding generation failed, keeping job update without it: {exc}")
-
-    try:
-        db.commit()
-        db.refresh(job)
+        job.embedding = json.dumps(get_embedding(updated_job.description))
     except Exception:
         db.rollback()
-        raise
+        raise HTTPException(
+            status_code=503,
+            detail="Could not regenerate the job embedding right now. Please try updating the job again.",
+        )
+
+    db.commit()
+    db.refresh(job)
 
     job = (
         db.query(Job)

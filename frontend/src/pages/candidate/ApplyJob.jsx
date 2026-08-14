@@ -6,17 +6,15 @@ import { ArrowLeft, CheckCircle2, Loader2, AlertTriangle, Briefcase, Mail, User 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000";
 const api = axios.create({ baseURL: API_BASE_URL, headers: { "Content-Type": "application/json" } });
 
-function getToken() {
-  return localStorage.getItem("candidate_token") || sessionStorage.getItem("candidate_token");
-}
-
 api.interceptors.request.use((config) => {
-  const token = getToken();
+  const token = localStorage.getItem("candidate_token") || sessionStorage.getItem("candidate_token");
   if (token) config.headers.Authorization = `Bearer ${token}`;
   return config;
 });
 
-const SESSION_KEY = "candidate_session_email";
+function getCandidateToken() {
+  return localStorage.getItem("candidate_token") || sessionStorage.getItem("candidate_token") || null;
+}
 
 function getCandidateFromStorage() {
   for (const storage of [localStorage, sessionStorage]) {
@@ -34,7 +32,7 @@ function clearCandidateSession() {
   for (const storage of [localStorage, sessionStorage]) {
     storage.removeItem("candidate_token");
     storage.removeItem("candidate");
-    storage.removeItem(SESSION_KEY);
+    storage.removeItem("candidate_session_email");
   }
 }
 
@@ -50,47 +48,35 @@ export default function ApplyJob() {
 
   const goToLogin = () => {
     clearCandidateSession();
-    navigate("/candidate-login", { state: { returnTo: `/candidate/apply/${jobId}` } });
+    navigate("/candidate-login", { state: { from: `/candidate/apply/${jobId}` } });
   };
 
   useEffect(() => {
     (async () => {
-      setLoading(true);
-      setError("");
-
-      // Must be logged in to apply — the token is the same one used by the
-      // working Candidate Dashboard (localStorage/sessionStorage "candidate_token").
-      if (!getToken()) {
+      // No token at all - send the candidate straight to login instead of
+      // letting the page load and fail on submit.
+      if (!getCandidateToken()) {
         goToLogin();
         return;
       }
 
       try {
-        const jobRes = await api.get(`/jobs/${jobId}`);
+        const [jobRes, meRes] = await Promise.all([
+          api.get(`/jobs/${jobId}`),
+          api.get("/candidates/me"), // Authoritative identity, sourced from the JWT - not the browser cache.
+        ]);
         setJob(jobRes.data);
-
-        // Always confirm the candidate against the backend (same call the
-        // Candidate Dashboard uses) instead of trusting stale localStorage data,
-        // so the application is guaranteed to belong to the logged-in candidate.
-        try {
-          const meRes = await api.get("/candidates/me");
-          setCandidate(meRes.data);
-        } catch (meErr) {
-          if (meErr?.response?.status === 401) {
-            goToLogin();
-            return;
-          }
-          // Backend candidate lookup failed for a non-auth reason; fall back to
-          // whatever was cached from login so the page still renders.
-          setCandidate(getCandidateFromStorage());
-        }
+        setCandidate(meRes.data);
       } catch (err) {
-        if (err?.response?.status === 404) {
-          setError("This job posting no longer exists.");
-        } else if (err?.response) {
-          setError(err.response.data?.detail || "Unable to load this job. Please try again.");
+        const status = err?.response?.status;
+        if (status === 401) {
+          goToLogin();
+          return;
+        }
+        if (status === 404) {
+          setError("This job could not be found. It may have been closed or removed.");
         } else {
-          setError("Unable to reach the TalentNest server. Please check your connection and try again.");
+          setError(err?.response?.data?.detail || "Unable to load the job/application details.");
         }
       } finally {
         setLoading(false);
@@ -100,7 +86,7 @@ export default function ApplyJob() {
   }, [jobId]);
 
   const submitApplication = async () => {
-    if (!getToken() || !candidate?.id) {
+    if (!getCandidateToken()) {
       goToLogin();
       return;
     }
@@ -109,7 +95,7 @@ export default function ApplyJob() {
     setError("");
     try {
       await api.post("/applications/", {
-        candidate_id: Number(candidate.id),
+        candidate_id: Number(candidate?.id),
         job_id: Number(jobId),
       });
       setSuccess(true);
@@ -117,24 +103,16 @@ export default function ApplyJob() {
       const status = err?.response?.status;
       const detail = err?.response?.data?.detail;
 
-      if (status === 400 && detail === "Already applied.") {
-        // Backend's duplicate-protection response — treat as success, not an error.
+      if (detail === "Already applied.") {
         setSuccess(true);
       } else if (status === 401) {
         goToLogin();
-      } else if (status === 403) {
-        setError(detail || "You don't have permission to apply for this job.");
       } else if (status === 404) {
-        setError(detail || "This job could not be found. It may have been removed.");
-      } else if (status === 409) {
-        setError("You have already applied for this job.");
-      } else if (status === 422) {
-        setError(detail || "Your application details are incomplete. Please refresh and try again.");
-      } else if (status >= 500) {
-        setError("The TalentNest server ran into a problem submitting your application. Please try again shortly.");
-      } else if (!err?.response) {
-        // No response reached the browser at all — network/CORS failure.
-        setError("We could not reach the TalentNest server. Please check your connection and try again.");
+        setError("Job not found.");
+      } else if (status === 503) {
+        setError(detail || "Server error. Please try again.");
+      } else if (status === 500) {
+        setError("Server error. Please try again.");
       } else {
         setError(detail || "We could not submit your application. Please try again.");
       }

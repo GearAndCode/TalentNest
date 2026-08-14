@@ -10,6 +10,7 @@ from app.schemas.ranking import RankedCandidate
 from app.schemas.application import ApplicationCreate, ApplicationResponse, ApplicationUpdate
 from app.services.semantic_matcher import calculate_semantic_match
 from app.services.ollama_service import analyze_candidate
+from app.services.embedding_service import get_embedding
 from app.auth.oauth2 import get_current_identity, get_current_candidate, get_current_company
 
 router = APIRouter(prefix="/applications", tags=["Applications"])
@@ -40,8 +41,25 @@ def apply_for_job(
 
     if not candidate.embedding:
         raise HTTPException(status_code=400, detail="Candidate embedding not found. Upload the resume again.")
+
+    # Jobs created before embedding generation existed (or any job whose
+    # embedding failed to persist) can have a NULL embedding column. Rather
+    # than permanently blocking applications to that job, generate the
+    # embedding now using the existing embedding service and persist it,
+    # exactly the same way job creation/update already do. This uses the
+    # job's real description - never a random or fake vector - so the
+    # resulting embedding is fully usable for AI matching going forward.
     if not job.embedding:
-        raise HTTPException(status_code=400, detail="Job embedding not found. Recreate or update the job.")
+        try:
+            job.embedding = json.dumps(get_embedding(job.description))
+            db.commit()
+            db.refresh(job)
+        except Exception:
+            db.rollback()
+            raise HTTPException(
+                status_code=503,
+                detail="Job embedding could not be generated right now. Please try again shortly.",
+            )
 
     ai_result = calculate_semantic_match(
         json.loads(candidate.embedding),
