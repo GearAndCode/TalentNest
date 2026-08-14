@@ -27,6 +27,7 @@ import {
   CheckCircle2,
   ArrowLeft,
   Loader2,
+  UserSearch,
   Route,
 } from "lucide-react";
 
@@ -193,46 +194,59 @@ export default function JobDetails() {
     fetchJob();
   }, [fetchJob]);
 
-  // Resolve the authenticated candidate from the JWT.
+  // Resolve the active candidate (same session mechanism as CandidateDashboard.jsx /
+  // BrowseJobs.jsx — this backend has no real candidate authentication) and check
+  // whether they've already applied to this specific job.
   useEffect(() => {
     (async () => {
       setCandidateChecked(false);
-      const token = getCandidateToken();
-      if (!token) {
-        setCandidate(null);
-        setAlreadyApplied(false);
+      if (!sessionEmail) {
         setCandidateChecked(true);
         return;
       }
       try {
-        const [meRes, applicationsRes] = await Promise.all([
-          api.get("/candidates/me"),
-          api.get("/applications/"),
-        ]);
-        setCandidate(meRes.data || null);
-        setAlreadyApplied(
-          (applicationsRes.data || []).some((a) => Number(a.job_id) === Number(jobId))
-        );
-      } catch (err) {
-        if (err?.response?.status === 401) {
-          localStorage.removeItem("candidate_token");
-          sessionStorage.removeItem("candidate_token");
-          localStorage.removeItem("candidate_access_token");
-          sessionStorage.removeItem("candidate_access_token");
-          setCandidate(null);
+        const [candidatesRes, applicationsRes] = await Promise.all([api.get("/candidates"), api.get("/applications")]);
+        const found = (candidatesRes.data || []).find((c) => c.email.toLowerCase() === sessionEmail.toLowerCase());
+        setCandidate(found || null);
+        if (found) {
+          const applied = (applicationsRes.data || []).some((a) => a.candidate_id === found.id && a.job_id === Number(jobId));
+          setAlreadyApplied(applied);
         }
+      } catch {
+        // Non-fatal — Apply Now will still surface a clear error if attempted.
       } finally {
         setCandidateChecked(true);
       }
     })();
-  }, [jobId]);
+  }, [sessionEmail, jobId]);
 
-  const handleApply = () => {
-    if (!getCandidateToken()) {
-      navigate("/candidate-login", { state: { returnTo: `/candidate/jobs/${jobId}` } });
+  const handleApply = async () => {
+    if (!candidate) {
+      navigate("/candidate-login");
       return;
     }
-    navigate(`/candidate/apply/${jobId}`);
+
+    if (alreadyApplied) return;
+
+    setApplying(true);
+    setApplyError(null);
+
+    try {
+      await api.post("/applications/", {
+        candidate_id: Number(candidate.id),
+        job_id: Number(jobId),
+      });
+      setApplySuccess(true);
+      setAlreadyApplied(true);
+    } catch (err) {
+      const detail = err?.response?.data?.detail;
+      const message = Array.isArray(detail)
+        ? detail.map((d) => d?.msg || JSON.stringify(d)).join(", ")
+        : detail || "Something went wrong while submitting your application.";
+      setApplyError(message);
+    } finally {
+      setApplying(false);
+    }
   };
 
   const skills = splitSkills(job?.skills);
@@ -339,6 +353,14 @@ export default function JobDetails() {
 
                     {!candidateChecked ? (
                       <div className="h-12 w-40 rounded-xl bg-[#F8FAFC] animate-pulse" />
+                    ) : !candidate ? (
+                      <button
+                        onClick={handleApply}
+                        className="inline-flex items-center gap-2 px-6 py-3.5 text-sm font-semibold text-[#FFFFFF] bg-[#0F766E] hover:bg-[#0D9488] rounded-xl shadow-sm transition-all duration-200"
+                      >
+                        <UserSearch className="w-4 h-4" />
+                        Select Your Profile to Apply
+                      </button>
                     ) : alreadyApplied ? (
                       <button
                         disabled
@@ -350,10 +372,11 @@ export default function JobDetails() {
                     ) : (
                       <button
                         onClick={handleApply}
-                        className="inline-flex items-center gap-2 px-6 py-3.5 text-sm font-semibold text-[#FFFFFF] bg-[#0F766E] hover:bg-[#0D9488] rounded-xl shadow-sm transition-all duration-200"
+                        disabled={applying}
+                        className="inline-flex items-center gap-2 px-6 py-3.5 text-sm font-semibold text-[#FFFFFF] bg-[#0F766E] hover:bg-[#0D9488] rounded-xl shadow-sm transition-all duration-200 disabled:opacity-70"
                       >
-                        <ChevronRight className="w-4 h-4" />
-                        Apply Now
+                        {applying ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+                        {applying ? "Submitting..." : "Apply Now"}
                       </button>
                     )}
                   </div>

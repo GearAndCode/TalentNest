@@ -24,7 +24,7 @@ const api = axios.create({
 });
 
 api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('access_token');
+  const token = localStorage.getItem('access_token') || localStorage.getItem('token');
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
@@ -136,7 +136,7 @@ export default function Jobs() {
   const [searchQuery, setSearchQuery] = useState('');
 
   const hrIdentity = useMemo(() => {
-    const token = localStorage.getItem('access_token');
+    const token = localStorage.getItem('access_token') || localStorage.getItem('token');
     const payload = token ? decodeJwtPayload(token) : null;
     const email = payload?.email || localStorage.getItem('hr_email') || '';
     const namePart = email.includes('@') ? email.split('@')[0] : email;
