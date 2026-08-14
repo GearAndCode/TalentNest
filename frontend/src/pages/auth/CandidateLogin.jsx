@@ -1,6 +1,6 @@
 import API_BASE_URL from "../../services/api";
 import React, { useEffect, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { 
   Mail, 
   Lock, 
@@ -70,6 +70,7 @@ const GoogleIcon = () => (
 
 export default function CandidateLogin() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [rememberMe, setRememberMe] = useState(false);
@@ -143,7 +144,7 @@ export default function CandidateLogin() {
     setIsLoading(true);
 
     try {
-      const response = await fetch('${API_BASE_URL}/candidate-auth/login', {
+      const response = await fetch(`${API_BASE_URL}/candidate-auth/login`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -196,7 +197,7 @@ export default function CandidateLogin() {
       otherStorage.removeItem('candidate_session_email');
 
       // Backend uses /dashboard for the candidate portal.
-      navigate('/dashboard', { replace: true });
+      navigate(location.state?.from || '/dashboard', { replace: true });
     } catch (error) {
       console.error('Candidate login error:', error);
 
@@ -240,7 +241,7 @@ export default function CandidateLogin() {
             }
 
             const apiResponse = await fetch(
-              '${API_BASE_URL}/candidate-auth/google',
+              `${API_BASE_URL}/candidate-auth/google`,
               {
                 method: 'POST',
                 headers: {
@@ -280,7 +281,7 @@ export default function CandidateLogin() {
             otherStorage.removeItem('candidate');
             otherStorage.removeItem('candidate_session_email');
 
-            navigate('/dashboard', { replace: true });
+            navigate(location.state?.from || '/dashboard', { replace: true });
           } catch (error) {
             console.error('Google candidate login error:', error);
             setErrors({
@@ -365,7 +366,7 @@ export default function CandidateLogin() {
 
     setForgotLoading(true);
     try {
-      const response = await fetch('${API_BASE_URL}/candidate-auth/forgot-password', {
+      const response = await fetch(`${API_BASE_URL}/candidate-auth/forgot-password`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: forgotEmail.trim() }),
@@ -396,7 +397,7 @@ export default function CandidateLogin() {
 
     setForgotLoading(true);
     try {
-      const response = await fetch('${API_BASE_URL}/candidate-auth/verify-reset-otp', {
+      const response = await fetch(`${API_BASE_URL}/candidate-auth/verify-reset-otp`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: forgotEmail.trim(), otp: resetOtp.trim() }),
@@ -431,7 +432,7 @@ export default function CandidateLogin() {
 
     setForgotLoading(true);
     try {
-      const response = await fetch('${API_BASE_URL}/candidate-auth/reset-password', {
+      const response = await fetch(`${API_BASE_URL}/candidate-auth/reset-password`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: forgotEmail.trim(), new_password: newPassword }),
