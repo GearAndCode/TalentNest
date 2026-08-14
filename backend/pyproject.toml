@@ -16,9 +16,7 @@ dependencies = [
     "email-validator",
     "google-generativeai",
     "pypdf",
-    "sentence-transformers",
-    "scikit-learn",
-    "numpy",
+    "openai",
     "pandas",
 ]
 
