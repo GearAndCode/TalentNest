@@ -18,8 +18,7 @@ import Aianalysis from "../pages/hr/Aianalysis";
 import AIRankings from "../pages/hr/AIRankings";
 
 import CandidateDashboard from "../pages/candidate/CandidateDashboard.jsx";
-import JobDetails from "../pages/candidate/JobDetails.jsx";
-import CandidateApply from "../pages/candidate/CandidateApply.jsx";
+import ApplyJob from "../pages/candidate/ApplyJob.jsx";
 
 export default function AppRoutes() {
   return (
@@ -46,11 +45,7 @@ export default function AppRoutes() {
 
       {/* Candidate Portal */}
       <Route path="/dashboard" element={<CandidateDashboard />} />
-      <Route path="/candidate/dashboard" element={<CandidateDashboard />} />
-      <Route path="/browse-jobs" element={<Careers />} />
-      <Route path="/candidate/browse-jobs" element={<Careers />} />
-      <Route path="/candidate/jobs/:jobId" element={<JobDetails />} />
-      <Route path="/candidate/apply/:jobId" element={<CandidateApply />} />
+      <Route path="/candidate/apply/:jobId" element={<ApplyJob />} />
     </Routes>
   );
 }
