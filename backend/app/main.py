@@ -40,8 +40,8 @@ app.add_middleware(
     allow_origins=[
         "http://localhost:5173",
         "http://127.0.0.1:5173",
-        "https://talent-nest-ktei74r80-gearandcodes-projects.vercel.app",
     ],
+    allow_origin_regex=r"https://talent-nest-[a-z0-9-]+-gearandcodes-projects\.vercel\.app",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
