@@ -1,5 +1,7 @@
+import logging
 import os
 import smtplib
+import traceback
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
@@ -9,17 +11,28 @@ from pydantic import BaseModel, EmailStr
 
 load_dotenv()
 
+logger = logging.getLogger("hr_access")
+
 router = APIRouter(prefix="/hr-access", tags=["HR Access"])
 
 MAIL_SERVER = os.getenv("MAIL_SERVER")
 MAIL_PORT = int(os.getenv("MAIL_PORT", "587"))
 MAIL_USERNAME = os.getenv("MAIL_USERNAME")
-MAIL_PASSWORD = os.getenv("MAIL_PASSWORD")
+# Gmail App Passwords are shown with spaces for readability, but a value with
+# spaces embedded in the actual env var breaks SMTP AUTH LOGIN — strip them.
+MAIL_PASSWORD = (os.getenv("MAIL_PASSWORD") or "").replace(" ", "") or None
 MAIL_FROM = os.getenv("MAIL_FROM") or MAIL_USERNAME
 HR_ACCESS_RECEIVER = os.getenv(
     "HR_ACCESS_RECEIVER",
     MAIL_USERNAME or "talentnest.ats@gmail.com",
 )
+
+_REQUIRED_ENV = {
+    "MAIL_SERVER": MAIL_SERVER,
+    "MAIL_USERNAME": MAIL_USERNAME,
+    "MAIL_PASSWORD": MAIL_PASSWORD,
+    "MAIL_FROM": MAIL_FROM,
+}
 
 
 class HRAccessRequest(BaseModel):
@@ -32,10 +45,13 @@ class HRAccessRequest(BaseModel):
 
 
 def _send_hr_access_email(request: HRAccessRequest) -> None:
-    if not MAIL_SERVER or not MAIL_USERNAME or not MAIL_PASSWORD or not MAIL_FROM:
+    missing = [name for name, value in _REQUIRED_ENV.items() if not value]
+    if missing:
+        # Name the exact missing variable(s) in the log so it's obvious which
+        # one to add in Render → Environment, without leaking any values.
         raise RuntimeError(
-            "SMTP is not configured. Check MAIL_SERVER, MAIL_USERNAME, "
-            "MAIL_PASSWORD and MAIL_FROM in .env."
+            "SMTP is not configured. Missing environment variable(s): "
+            + ", ".join(missing)
         )
 
     safe_message = (
@@ -136,10 +152,18 @@ def _send_hr_access_email(request: HRAccessRequest) -> None:
 
     server = None
     try:
-        server = smtplib.SMTP(MAIL_SERVER, MAIL_PORT, timeout=30)
-        server.ehlo()
-        server.starttls()
-        server.ehlo()
+        # Port 465 is Gmail's implicit-SSL port and does not speak STARTTLS;
+        # 587 (and anything else) uses the STARTTLS upgrade. Supporting both
+        # means a MAIL_PORT/MAIL_SERVER mismatch in Render's env vars doesn't
+        # silently break this endpoint the way a hardcoded STARTTLS call would.
+        if MAIL_PORT == 465:
+            server = smtplib.SMTP_SSL(MAIL_SERVER, MAIL_PORT, timeout=30)
+            server.ehlo()
+        else:
+            server = smtplib.SMTP(MAIL_SERVER, MAIL_PORT, timeout=30)
+            server.ehlo()
+            server.starttls()
+            server.ehlo()
         server.login(MAIL_USERNAME, MAIL_PASSWORD)
         server.sendmail(
             MAIL_FROM,
@@ -158,8 +182,30 @@ def _send_hr_access_email(request: HRAccessRequest) -> None:
 def request_hr_access(request: HRAccessRequest):
     try:
         _send_hr_access_email(request)
+    except smtplib.SMTPAuthenticationError as exc:
+        logger.error(
+            "HR ACCESS EMAIL ERROR: SMTP authentication failed for %s — "
+            "check MAIL_USERNAME/MAIL_PASSWORD (Gmail requires a 16-char "
+            "App Password, not the account password): %s",
+            MAIL_USERNAME, exc,
+        )
+        raise HTTPException(
+            status_code=500,
+            detail="The HR access request could not be sent. Please try again.",
+        )
+    except (smtplib.SMTPConnectError, smtplib.SMTPServerDisconnected, OSError) as exc:
+        logger.error(
+            "HR ACCESS EMAIL ERROR: could not reach %s:%s from this server "
+            "(often an outbound network/firewall restriction on the host): %s",
+            MAIL_SERVER, MAIL_PORT, exc,
+        )
+        raise HTTPException(
+            status_code=500,
+            detail="The HR access request could not be sent. Please try again.",
+        )
     except Exception as exc:
-        print(f"HR ACCESS EMAIL ERROR: {exc}")
+        logger.error("HR ACCESS EMAIL ERROR: %s: %s", type(exc).__name__, exc)
+        logger.error(traceback.format_exc())
         raise HTTPException(
             status_code=500,
             detail="The HR access request could not be sent. Please try again.",
