@@ -117,7 +117,11 @@ const NAV_ITEMS = [
     icon: BrainCircuit,
     path: "/candidate/ai-analysis",
   },
-  
+  {
+    label: "Application Tracker",
+    icon: Route,
+    path: "/candidate/applications",
+  },
   {
     label: "Profile",
     icon: UserCircle2,
@@ -150,6 +154,9 @@ export default function JobDetails() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
+  const [applying, setApplying] = useState(false);
+  const [applyError, setApplyError] = useState(null);
+  const [applySuccess, setApplySuccess] = useState(false);
 
   const isActivePath = (path) => location.pathname === path;
   const handleNav = useCallback(
@@ -186,34 +193,45 @@ export default function JobDetails() {
     fetchJob();
   }, [fetchJob]);
 
-  // Resolve the active candidate (same session mechanism as CandidateDashboard.jsx /
-  // BrowseJobs.jsx — this backend has no real candidate authentication) and check
-  // whether they've already applied to this specific job.
+  // Resolve the authenticated candidate from the JWT.
   useEffect(() => {
     (async () => {
       setCandidateChecked(false);
-      if (!sessionEmail) {
+      const token = getCandidateToken();
+      if (!token) {
+        setCandidate(null);
+        setAlreadyApplied(false);
         setCandidateChecked(true);
         return;
       }
       try {
-        const [candidatesRes, applicationsRes] = await Promise.all([api.get("/candidates"), api.get("/applications")]);
-        const found = (candidatesRes.data || []).find((c) => c.email.toLowerCase() === sessionEmail.toLowerCase());
-        setCandidate(found || null);
-        if (found) {
-          const applied = (applicationsRes.data || []).some((a) => a.candidate_id === found.id && a.job_id === Number(jobId));
-          setAlreadyApplied(applied);
+        const [meRes, applicationsRes] = await Promise.all([
+          api.get("/candidates/me"),
+          api.get("/applications/"),
+        ]);
+        setCandidate(meRes.data || null);
+        setAlreadyApplied(
+          (applicationsRes.data || []).some((a) => Number(a.job_id) === Number(jobId))
+        );
+      } catch (err) {
+        if (err?.response?.status === 401) {
+          localStorage.removeItem("candidate_token");
+          sessionStorage.removeItem("candidate_token");
+          localStorage.removeItem("candidate_access_token");
+          sessionStorage.removeItem("candidate_access_token");
+          setCandidate(null);
         }
-      } catch {
-        // Non-fatal — Apply Now will still surface a clear error if attempted.
       } finally {
         setCandidateChecked(true);
       }
     })();
-  }, [sessionEmail, jobId]);
+  }, [jobId]);
 
   const handleApply = () => {
-    // Always open the dedicated Apply Now page for this exact job.
+    if (!getCandidateToken()) {
+      navigate("/candidate-login", { state: { returnTo: `/candidate/jobs/${jobId}` } });
+      return;
+    }
     navigate(`/candidate/apply/${jobId}`);
   };
 
@@ -306,7 +324,20 @@ export default function JobDetails() {
                   )}
 
                   <div className="mt-6 pt-6 border-t border-[#E2E8F0]">
-{!candidateChecked ? (
+                    {applySuccess && (
+                      <div className="mb-4 flex items-center gap-2 px-4 py-3 rounded-xl bg-[#0F766E]/10 text-[#0F766E] text-sm font-medium">
+                        <CheckCircle2 className="w-4 h-4" />
+                        Application submitted successfully.
+                      </div>
+                    )}
+                    {applyError && (
+                      <div className="mb-4 flex items-center gap-2 px-4 py-3 rounded-xl bg-[#EF4444]/10 text-[#EF4444] text-sm font-medium">
+                        <AlertTriangle className="w-4 h-4 shrink-0" />
+                        {applyError}
+                      </div>
+                    )}
+
+                    {!candidateChecked ? (
                       <div className="h-12 w-40 rounded-xl bg-[#F8FAFC] animate-pulse" />
                     ) : alreadyApplied ? (
                       <button
@@ -515,7 +546,13 @@ function TopNavbar({ candidate, searchQuery, setSearchQuery, onMenuClick, onLogo
               </div>
             )}
 
-            
+            <button
+              onClick={onLogout}
+              className="hidden sm:inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-[#0F766E] bg-[#FFFFFF] border border-[#E2E8F0] hover:border-[#14B8A6] hover:bg-[#F8FAFC] rounded-xl shadow-2xs transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-[#0F766E]"
+            >
+              <LogOut className="w-4 h-4" />
+              Switch Profile
+            </button>
           </div>
         </div>
       </div>

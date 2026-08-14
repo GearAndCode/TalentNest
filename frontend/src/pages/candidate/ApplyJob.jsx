@@ -1,72 +1,67 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import axios from "axios";
-import { ArrowLeft, CheckCircle2, Loader2, AlertTriangle, Briefcase, Mail, User } from "lucide-react";
+import { ArrowLeft, Loader2, CheckCircle2, AlertTriangle, MapPin, Briefcase } from "lucide-react";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000";
 const api = axios.create({ baseURL: API_BASE_URL, headers: { "Content-Type": "application/json" } });
 
+function getCandidateToken() {
+  return (
+    localStorage.getItem("candidate_token") ||
+    sessionStorage.getItem("candidate_token") ||
+    localStorage.getItem("candidate_access_token") ||
+    sessionStorage.getItem("candidate_access_token") ||
+    null
+  );
+}
+
 api.interceptors.request.use((config) => {
-  const token = localStorage.getItem("candidate_token") || sessionStorage.getItem("candidate_token");
+  const token = getCandidateToken();
   if (token) config.headers.Authorization = `Bearer ${token}`;
   return config;
 });
 
-const SESSION_KEY = "candidate_session_email";
-
-function getCandidateFromStorage() {
-  for (const storage of [localStorage, sessionStorage]) {
-    const raw = storage.getItem("candidate");
-    if (!raw) continue;
-    try {
-      const parsed = JSON.parse(raw);
-      if (parsed?.id) return parsed;
-    } catch {}
-  }
-  return null;
-}
-
-export default function ApplyJob() {
+export default function CandidateApply() {
   const navigate = useNavigate();
   const { jobId } = useParams();
   const [job, setJob] = useState(null);
-  const [candidate, setCandidate] = useState(getCandidateFromStorage());
+  const [candidate, setCandidate] = useState(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
 
   useEffect(() => {
+    if (!getCandidateToken()) {
+      navigate("/candidate-login", { replace: true, state: { returnTo: `/candidate/apply/${jobId}` } });
+      return;
+    }
     (async () => {
       try {
-        const jobRes = await api.get(`/jobs/${jobId}`);
+        const [jobRes, candidateRes] = await Promise.all([
+          api.get(`/jobs/${jobId}`),
+          api.get("/candidates/me"),
+        ]);
         setJob(jobRes.data);
-
-        let active = getCandidateFromStorage();
-        if (!active) {
-          const email = localStorage.getItem(SESSION_KEY) || sessionStorage.getItem(SESSION_KEY);
-          if (email) {
-            const candidatesRes = await api.get("/candidates");
-            active = (candidatesRes.data || []).find(
-              (c) => String(c.email || "").toLowerCase() === email.toLowerCase()
-            );
-          }
-        }
-        setCandidate(active || null);
+        setCandidate(candidateRes.data);
       } catch (err) {
-        setError(err?.response?.data?.detail || "Unable to load the job/application details.");
+        if (err?.response?.status === 401) {
+          navigate("/candidate-login", { replace: true, state: { returnTo: `/candidate/apply/${jobId}` } });
+          return;
+        }
+        setError(err?.response?.data?.detail || "Unable to load the application page.");
       } finally {
         setLoading(false);
       }
     })();
-  }, [jobId]);
+  }, [jobId, navigate]);
 
   const submitApplication = async () => {
     if (!candidate?.id) {
-      navigate("/candidate-login", { state: { returnTo: `/candidate/apply/${jobId}` } });
+      setError("Your candidate session could not be verified. Please log in again.");
       return;
     }
-
     setSubmitting(true);
     setError("");
     try {
@@ -77,18 +72,26 @@ export default function ApplyJob() {
       setSuccess(true);
     } catch (err) {
       const detail = err?.response?.data?.detail;
-      if (detail === "Already applied.") {
-        setSuccess(true);
-      } else {
-        setError(detail || "We could not submit your application. Please try again.");
-      }
+      setError(detail || "We could not submit your application. Please try again.");
     } finally {
       setSubmitting(false);
     }
   };
 
   if (loading) {
-    return <div className="min-h-screen bg-[#F8FAFC] flex items-center justify-center text-[#0F766E]"><Loader2 className="w-8 h-8 animate-spin" /></div>;
+    return <div className="min-h-screen flex items-center justify-center text-[#0F766E]"><Loader2 className="w-8 h-8 animate-spin" /></div>;
+  }
+
+  if (error && !job) {
+    return (
+      <div className="min-h-screen bg-[#F8FAFC] flex items-center justify-center p-6">
+        <div className="max-w-md w-full bg-white rounded-2xl border border-red-200 p-6 text-center">
+          <AlertTriangle className="w-10 h-10 mx-auto text-red-500" />
+          <p className="mt-4 text-sm text-red-700">{error}</p>
+          <button onClick={() => navigate(`/candidate/jobs/${jobId}`)} className="mt-6 px-5 py-3 rounded-xl bg-[#0F766E] text-white font-semibold">Back to Job</button>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -98,7 +101,6 @@ export default function ApplyJob() {
           <ArrowLeft className="w-4 h-4" /> Back to Job Details
         </button>
       </header>
-
       <main className="max-w-3xl mx-auto px-4 sm:px-6 py-10">
         <div className="mb-7">
           <p className="text-sm font-semibold text-[#0F766E]">TalentNest Application</p>
@@ -106,56 +108,49 @@ export default function ApplyJob() {
           <p className="text-[#475569] mt-2">Review your details and submit your application directly to the hiring team.</p>
         </div>
 
-        {error && (
-          <div className="mb-5 flex items-start gap-3 p-4 rounded-xl bg-red-50 border border-red-200 text-red-700 text-sm">
-            <AlertTriangle className="w-5 h-5 shrink-0" />
-            <span>{error}</span>
+        <section className="bg-white rounded-2xl border border-[#E2E8F0] shadow-sm p-6">
+          <h2 className="font-bold text-xl">{job?.title || "Job"}</h2>
+          <p className="text-sm text-[#475569] mt-1">{job?.department || job?.category || "TalentNest"}</p>
+          <div className="mt-4 flex flex-wrap gap-4 text-sm text-[#475569]">
+            {job?.location && <span className="inline-flex items-center gap-1.5"><MapPin className="w-4 h-4 text-[#0F766E]" />{job.location}</span>}
+            {job?.employment_type && <span className="inline-flex items-center gap-1.5"><Briefcase className="w-4 h-4 text-[#0F766E]" />{job.employment_type}</span>}
           </div>
-        )}
+        </section>
 
-        {success ? (
-          <div className="bg-white rounded-2xl border border-[#E2E8F0] shadow-sm p-8 sm:p-10 text-center">
-            <div className="w-16 h-16 mx-auto rounded-2xl bg-[#0F766E]/10 text-[#0F766E] flex items-center justify-center">
-              <CheckCircle2 className="w-9 h-9" />
+        <section className="mt-5 bg-white rounded-2xl border border-[#E2E8F0] shadow-sm p-6">
+          <h2 className="font-bold text-lg">Your application details</h2>
+          <div className="mt-4 grid sm:grid-cols-2 gap-4">
+            <div className="rounded-xl bg-[#F8FAFC] border border-[#E2E8F0] p-4">
+              <p className="text-xs text-[#64748B]">Name</p>
+              <p className="font-semibold mt-1">{candidate?.full_name || candidate?.name || "Your account"}</p>
             </div>
-            <h2 className="text-2xl font-bold mt-5">Application Submitted</h2>
-            <p className="text-[#475569] mt-2 max-w-md mx-auto">Your application has been submitted successfully and is now available to the hiring team.</p>
-            <div className="mt-7 flex flex-col sm:flex-row justify-center gap-3">
-              <button onClick={() => navigate("/candidate/applications")} className="px-5 py-3 rounded-xl bg-[#0F766E] text-white font-semibold hover:bg-[#0D9488]">View My Applications</button>
-              <button onClick={() => navigate("/candidate/browse-jobs")} className="px-5 py-3 rounded-xl border border-[#E2E8F0] bg-white text-[#0F766E] font-semibold">Browse More Jobs</button>
+            <div className="rounded-xl bg-[#F8FAFC] border border-[#E2E8F0] p-4">
+              <p className="text-xs text-[#64748B]">Email</p>
+              <p className="font-semibold mt-1 break-all">{candidate?.email || "Your account email"}</p>
             </div>
           </div>
-        ) : (
-          <div className="space-y-5">
-            <section className="bg-white rounded-2xl border border-[#E2E8F0] shadow-sm p-6">
-              <div className="flex items-start gap-4">
-                <div className="w-14 h-14 rounded-2xl bg-[#0F766E]/10 text-[#0F766E] flex items-center justify-center"><Briefcase /></div>
-                <div>
-                  <h2 className="text-xl font-bold">{job?.title || "Position"}</h2>
-                  <p className="text-[#475569] mt-1">{job?.department || "TalentNest opportunity"}</p>
-                  <p className="text-sm text-[#64748B] mt-2">{job?.location || "Remote"} · {job?.employment_type || "Full Time"}</p>
-                </div>
-              </div>
-            </section>
+        </section>
 
-            <section className="bg-white rounded-2xl border border-[#E2E8F0] shadow-sm p-6">
-              <h2 className="font-bold text-lg">Applicant</h2>
-              <div className="mt-4 grid sm:grid-cols-2 gap-4">
-                <div className="rounded-xl bg-[#F8FAFC] border border-[#E2E8F0] p-4 flex gap-3"><User className="text-[#0F766E] w-5" /><div><p className="text-xs text-[#64748B]">Name</p><p className="font-semibold">{candidate?.full_name || candidate?.name || "Your account"}</p></div></div>
-                <div className="rounded-xl bg-[#F8FAFC] border border-[#E2E8F0] p-4 flex gap-3"><Mail className="text-[#0F766E] w-5" /><div><p className="text-xs text-[#64748B]">Email</p><p className="font-semibold break-all">{candidate?.email || "Your account email"}</p></div></div>
-              </div>
-            </section>
-
-            <section className="bg-white rounded-2xl border border-[#E2E8F0] shadow-sm p-6">
+        <section className="mt-5 bg-white rounded-2xl border border-[#E2E8F0] shadow-sm p-6">
+          {success ? (
+            <div className="text-center py-4">
+              <CheckCircle2 className="w-12 h-12 mx-auto text-[#0F766E]" />
+              <h2 className="font-bold text-xl mt-4">Application submitted</h2>
+              <p className="text-sm text-[#64748B] mt-2">Your application is now visible to the hiring team.</p>
+              <button onClick={() => navigate("/candidate/applications")} className="mt-6 px-6 py-3 rounded-xl bg-[#0F766E] text-white font-semibold">View My Applications</button>
+            </div>
+          ) : (
+            <>
               <h2 className="font-bold text-lg">Ready to apply?</h2>
               <p className="text-sm text-[#64748B] mt-1">Your application will be attached to this job and become visible in the HR Applications portal.</p>
+              {error && <div className="mt-4 p-3 rounded-xl bg-red-50 border border-red-200 text-sm text-red-700">{error}</div>}
               <button onClick={submitApplication} disabled={submitting} className="mt-6 w-full sm:w-auto inline-flex items-center justify-center gap-2 px-7 py-3.5 rounded-xl bg-[#0F766E] text-white font-semibold hover:bg-[#0D9488] disabled:opacity-60">
                 {submitting && <Loader2 className="w-4 h-4 animate-spin" />}
                 {submitting ? "Submitting Application..." : "Submit Application"}
               </button>
-            </section>
-          </div>
-        )}
+            </>
+          )}
+        </section>
       </main>
     </div>
   );

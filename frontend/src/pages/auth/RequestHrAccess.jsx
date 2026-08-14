@@ -143,28 +143,31 @@ try {
   const API_BASE_URL =
     import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000";
 
-  await fetch(`${API_BASE_URL}/hr-access/request`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      company_name: form.companyName.trim(),
-      work_email: form.workEmail.trim(),
-      full_name: form.fullName.trim(),
-      job_title: form.jobTitle.trim(),
-      company_size: form.companySize,
-      message: form.message.trim(),
-    }),
-  }).then(async (response) => {
-    const data = await response.json().catch(() => ({}));
+  const payload = {
+    company_name: form.companyName.trim(),
+    work_email: form.workEmail.trim(),
+    full_name: form.fullName.trim(),
+    job_title: form.jobTitle.trim(),
+    company_size: form.companySize,
+    message: form.message.trim(),
+  };
 
+  try {
+    const response = await fetch(`${API_BASE_URL}/hr-access/request`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const data = await response.json().catch(() => ({}));
     if (!response.ok) {
       throw new Error(data.detail || "Unable to send HR access request.");
     }
-
-    return data;
-  });
+  } catch (apiError) {
+    // Do not make the user lose the request because SMTP/CORS is unavailable.
+    // Open a pre-filled email as a reliable fallback.
+    console.warn("HR access API failed; opening email fallback.", apiError);
+    window.location.href = buildMailto();
+  }
 
   setSubmitted(true);
 } catch (error) {

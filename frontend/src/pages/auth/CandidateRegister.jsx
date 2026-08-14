@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import API_BASE_URL from "../../services/api";
 import axios from 'axios';
 import {
   ArrowLeft,
@@ -31,7 +30,7 @@ import {
   ChevronRight,
   LockKeyhole
 } from 'lucide-react';
-const API = API_BASE_URL;
+const API = import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000";
 export default function CandidateRegister() {
   const navigate = useNavigate();
 
@@ -419,17 +418,35 @@ const registerResponse = await axios.post(
     registerData
 );
 
-const candidateId = registerResponse.data.id;
+// Registration returns the candidate record. Sign in immediately to obtain
+// the JWT required by protected candidate endpoints such as resume upload.
+const loginResponse = await axios.post(`${API}/candidate-auth/login`, {
+  email: formData.email.trim(),
+  password: formData.password,
+});
+
+const accessToken = loginResponse.data.access_token;
+const loggedInCandidate = loginResponse.data.candidate;
+
+localStorage.setItem("candidate_token", accessToken);
+localStorage.setItem("candidate", JSON.stringify(loggedInCandidate));
+localStorage.setItem("candidate_session_email", loggedInCandidate.email);
+// Keep these legacy keys for compatibility with older candidate pages.
+localStorage.setItem("candidate_access_token", accessToken);
+localStorage.setItem("candidate_id", String(loggedInCandidate.id));
+localStorage.setItem("candidate_email", loggedInCandidate.email);
+localStorage.setItem("candidate_name", loggedInCandidate.name || registerData.full_name);
 
 const resumeForm = new FormData();
 resumeForm.append("resume", resume);
 
 await axios.post(
-    `${API}/candidates/${candidateId}/upload-resume`,
+    `${API}/candidates/me/upload-resume`,
     resumeForm,
     {
         headers: {
             "Content-Type": "multipart/form-data",
+            Authorization: `Bearer ${accessToken}`,
         },
     }
 );

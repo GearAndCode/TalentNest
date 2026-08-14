@@ -1,6 +1,6 @@
 import API_BASE_URL from "../../services/api";
 import React, { useEffect, useState } from 'react';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { 
   Mail, 
   Lock, 
@@ -197,13 +197,13 @@ export default function CandidateLogin() {
       otherStorage.removeItem('candidate_session_email');
 
       // Backend uses /dashboard for the candidate portal.
-      navigate(location.state?.from || '/dashboard', { replace: true });
+      navigate(location.state?.returnTo || '/dashboard', { replace: true, state: undefined });
     } catch (error) {
       console.error('Candidate login error:', error);
 
       setErrors({
         email:
-          'Cannot connect to TalentNest backend. Make sure the FastAPI server is running on port 8000.',
+          'Cannot connect to TalentNest backend. Please try again.',
       });
     } finally {
       setIsLoading(false);
@@ -212,127 +212,109 @@ export default function CandidateLogin() {
 
   const handleGoogleSignIn = () => {
     if (!GOOGLE_CLIENT_ID) {
-      setErrors({
-        email:
-          'Google Sign-In is not configured. Set VITE_GOOGLE_CLIENT_ID in the frontend .env file.',
-      });
+      setErrors({ email: 'Google Sign-In is not configured.' });
       return;
     }
 
     setErrors({});
     setIsGoogleLoading(true);
 
-    const startGooglePrompt = () => {
+    const run = () => {
       if (!window.google?.accounts?.id) {
         setIsGoogleLoading(false);
-        setErrors({
-          email:
-            'Google Sign-In could not load. Check your internet connection and Google Client ID.',
-        });
+        setErrors({ email: 'Google Sign-In could not load. Please refresh and try again.' });
         return;
       }
 
+      const finishLogin = async (response) => {
+        try {
+          if (!response?.credential) throw new Error('Google did not return a credential.');
+
+          const apiResponse = await fetch(`${API_BASE_URL}/candidate-auth/google`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ credential: response.credential }),
+          });
+          const data = await apiResponse.json().catch(() => ({}));
+          if (!apiResponse.ok) throw new Error(data?.detail || 'Unable to sign in with Google.');
+
+          const storage = rememberMe ? localStorage : sessionStorage;
+          storage.setItem('candidate_token', data.access_token);
+          storage.setItem('candidate', JSON.stringify(data.candidate));
+          storage.setItem('candidate_session_email', data.candidate.email);
+          storage.setItem('candidate_access_token', data.access_token);
+
+          const otherStorage = rememberMe ? sessionStorage : localStorage;
+          otherStorage.removeItem('candidate_token');
+          otherStorage.removeItem('candidate');
+          otherStorage.removeItem('candidate_session_email');
+          otherStorage.removeItem('candidate_access_token');
+
+          navigate(location.state?.returnTo || '/dashboard', { replace: true, state: undefined });
+        } catch (error) {
+          console.error('Google candidate login error:', error);
+          setErrors({ email: error?.message || 'Unable to sign in with Google.' });
+        } finally {
+          setIsGoogleLoading(false);
+        }
+      };
+
       window.google.accounts.id.initialize({
         client_id: GOOGLE_CLIENT_ID,
-        callback: async (response) => {
-          try {
-            if (!response?.credential) {
-              throw new Error('Google did not return a credential.');
-            }
-
-            const apiResponse = await fetch(
-              `${API_BASE_URL}/candidate-auth/google`,
-              {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                  credential: response.credential,
-                }),
-              }
-            );
-
-            const data = await apiResponse.json();
-
-            if (!apiResponse.ok) {
-              throw new Error(
-                data?.detail || 'Unable to sign in with Google.'
-              );
-            }
-
-            const storage = rememberMe ? localStorage : sessionStorage;
-
-            storage.setItem('candidate_token', data.access_token);
-            storage.setItem(
-              'candidate',
-              JSON.stringify(data.candidate)
-            );
-            storage.setItem(
-              'candidate_session_email',
-              data.candidate.email
-            );
-
-            const otherStorage = rememberMe
-              ? sessionStorage
-              : localStorage;
-
-            otherStorage.removeItem('candidate_token');
-            otherStorage.removeItem('candidate');
-            otherStorage.removeItem('candidate_session_email');
-
-            navigate(location.state?.from || '/dashboard', { replace: true });
-          } catch (error) {
-            console.error('Google candidate login error:', error);
-            setErrors({
-              email:
-                error?.message ||
-                'Unable to sign in with Google. Please try again.',
-            });
-          } finally {
-            setIsGoogleLoading(false);
-          }
-        },
+        callback: finishLogin,
+        auto_select: false,
+        cancel_on_tap_outside: false,
       });
 
+      // Render a real GIS button into a temporary off-screen container. This
+      // avoids relying on One Tap being displayable after a normal button click.
+      const host = document.createElement('div');
+      host.style.position = 'fixed';
+      host.style.left = '-10000px';
+      host.style.top = '0';
+      host.style.width = '1px';
+      host.style.height = '1px';
+      document.body.appendChild(host);
+      window.google.accounts.id.renderButton(host, {
+        type: 'standard',
+        theme: 'outline',
+        size: 'large',
+        text: 'continue_with',
+        shape: 'rectangular',
+        width: 300,
+      });
+
+      // The GIS button is rendered by Google and its click cannot be invoked
+      // programmatically. Prompt is used as the fallback/primary interaction.
       window.google.accounts.id.prompt((notification) => {
-        if (
-          notification.isNotDisplayed?.() ||
-          notification.isSkippedMoment?.()
-        ) {
+        if (notification.isNotDisplayed?.() || notification.isSkippedMoment?.()) {
           setIsGoogleLoading(false);
-          setErrors({
-            email:
-              'Google sign-in could not be displayed. Please try again or use email and password.',
-          });
+          setErrors({ email: 'Google sign-in was blocked by the browser. Please allow Google sign-in for this site or try again.' });
         }
       });
+
+      window.setTimeout(() => {
+        host.remove();
+      }, 120000);
     };
 
     if (window.google?.accounts?.id) {
-      startGooglePrompt();
+      run();
       return;
     }
 
-    // Give the GIS script a short time to initialize.
     let attempts = 0;
     const timer = window.setInterval(() => {
       attempts += 1;
-
       if (window.google?.accounts?.id) {
         window.clearInterval(timer);
-        startGooglePrompt();
-      } else if (attempts >= 40) {
+        run();
+      } else if (attempts >= 50) {
         window.clearInterval(timer);
         setIsGoogleLoading(false);
-        setErrors({
-          email:
-            'Google Sign-In could not load. Check your internet connection and Google Client ID.',
-        });
+        setErrors({ email: 'Google Sign-In could not load. Please refresh and try again.' });
       }
     }, 100);
-
-    return () => window.clearInterval(timer);
   };
 
 

@@ -19,4 +19,7 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
 
 # Google OAuth / Google Identity Services
-GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "")
+GOOGLE_CLIENT_ID = os.getenv(
+    "GOOGLE_CLIENT_ID",
+    "1034068374242-qumdm0600c5m5h2j10rlaurnn4m0u9o4.apps.googleusercontent.com",
+)

@@ -83,42 +83,42 @@ const CAREER_RESOURCES = [
     desc: "Search live job postings by keyword, location, department, and category.",
     icon: Search,
     tag: "LIVE JOBS",
-    path: "/browse-jobs",
+    path: "/candidate-login",
   },
   {
     title: "Apply to Open Roles",
     desc: "Open a job, review the position details, and submit your application directly to the hiring team.",
     icon: Send,
     tag: "APPLICATIONS",
-    path: "/browse-jobs",
+    path: "/candidate-login",
   },
   {
     title: "My Applications",
     desc: "View the applications you have submitted and keep your application history in one place.",
     icon: Briefcase,
     tag: "YOUR APPLICATIONS",
-    path: "/candidate/applications",
+    path: "/candidate-login",
   },
   {
     title: "Application Tracker",
     desc: "Track your application progress and see the latest status of your submitted applications.",
     icon: Route,
     tag: "TRACK PROGRESS",
-    path: "/candidate/tracker",
+    path: "/candidate-login",
   },
   {
     title: "AI Resume Analysis",
     desc: "Use the TalentNest AI resume analysis workspace to review candidate resume information and match insights.",
     icon: BrainCircuit,
     tag: "AI ANALYSIS",
-    path: "/candidate/ai-analysis",
+    path: "/candidate-login",
   },
   {
     title: "Profile & Resume",
     desc: "Manage your candidate profile and resume information from your personal TalentNest profile.",
     icon: UserCircle2,
     tag: "PROFILE",
-    path: "/candidate/profile",
+    path: "/candidate-login",
   },
 ];
 
@@ -507,7 +507,7 @@ export default function CareersPage() {
     if (!isLoggedIn) {
       navigate('/candidate-login');
     } else {
-      navigate(`/jobs/${jobId}`);
+      navigate(`/candidate/jobs/${jobId}`);
     }
   };
 

@@ -3,7 +3,6 @@ import axios from 'axios';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import toast, { Toaster } from 'react-hot-toast';
-import API_BASE_URL_CONFIG from "../../services/api";
 import {
   Plus, Search, Eye, Pencil, Trash2, X, MapPin, Briefcase, Building2,
   DollarSign, Calendar, GraduationCap, Tag, AlertTriangle, XCircle,
@@ -15,7 +14,8 @@ import {
 // ==========================================
 // AXIOS CLIENT (unchanged — matches existing project config)
 // ==========================================
-const API_BASE_URL = API_BASE_URL_CONFIG;
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000';
+
 const api = axios.create({
   baseURL: API_BASE_URL,
   headers: {
@@ -162,7 +162,7 @@ export default function Jobs() {
   );
 
   const handleLogout = useCallback(() => {
-    localStorage.removeItem('access_token');
+    localStorage.removeItem('token');
     toast.success('Logged out successfully');
     navigate('/hr-login');
   }, [navigate]);
