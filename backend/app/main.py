@@ -19,6 +19,7 @@ from app.routers.dashboard import router as dashboard_router
 from app.routers.subscriber import router as subscriber_router
 from app.routers.hr_access_router import router as hr_access_router
 
+
 # Create database tables
 Base.metadata.create_all(bind=engine)
 
@@ -27,6 +28,7 @@ app = FastAPI(
     version="1.0.0",
 )
 
+
 # Serve uploaded files (resumes)
 app.mount(
     "/uploads",
@@ -34,18 +36,21 @@ app.mount(
     name="uploads",
 )
 
+
 # CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://localhost:5173",
         "http://127.0.0.1:5173",
+        "https://talent-nest-9f67k7d8q-gearandcodes-projects.vercel.app",
     ],
-    allow_origin_regex=r"^https://.*\.vercel\.app$",
+    allow_origin_regex=r"^https://([a-zA-Z0-9-]+\.)*vercel\.app$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
 
 # Routers
 app.include_router(auth_router)
