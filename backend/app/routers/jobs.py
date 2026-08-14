@@ -96,7 +96,8 @@ def create_job(
 ):
     try:
         embedding = get_embedding(job.description)
-    except Exception:
+    except Exception as exc:
+        print(f"EMBEDDING GENERATION FAILED on job create: {type(exc).__name__}: {exc}")
         raise HTTPException(
             status_code=503,
             detail="Could not generate the job embedding right now. Please try creating the job again.",
@@ -265,8 +266,9 @@ def update_job(
 
     try:
         job.embedding = json.dumps(get_embedding(updated_job.description))
-    except Exception:
+    except Exception as exc:
         db.rollback()
+        print(f"EMBEDDING GENERATION FAILED on job update ({job.id}): {type(exc).__name__}: {exc}")
         raise HTTPException(
             status_code=503,
             detail="Could not regenerate the job embedding right now. Please try updating the job again.",

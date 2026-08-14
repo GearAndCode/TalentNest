@@ -54,8 +54,12 @@ def apply_for_job(
             job.embedding = json.dumps(get_embedding(job.description))
             db.commit()
             db.refresh(job)
-        except Exception:
+        except Exception as exc:
             db.rollback()
+            # Logged so the real cause (missing/invalid OPENAI_API_KEY,
+            # quota, network egress, etc.) is visible in the Render logs
+            # instead of being hidden behind a generic 503.
+            print(f"EMBEDDING GENERATION FAILED for job {job.id}: {type(exc).__name__}: {exc}")
             raise HTTPException(
                 status_code=503,
                 detail="Job embedding could not be generated right now. Please try again shortly.",
