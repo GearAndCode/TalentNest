@@ -8,8 +8,9 @@ from app.models.company import Base
 # Import models so SQLAlchemy creates all tables
 from app.models import company, job, candidate, application, subscriber
 
-# Routers
 from app.routers.candidate_auth import router as candidate_auth_router
+
+# Import routers
 from app.routers.auth import router as auth_router
 from app.routers.jobs import router as jobs_router
 from app.routers.candidate import router as candidate_router
@@ -22,44 +23,13 @@ from app.routers.hr_access_router import router as hr_access_router
 # Create database tables
 Base.metadata.create_all(bind=engine)
 
-
 app = FastAPI(
     title="TalentNest ATS Backend",
     version="1.0.0",
 )
 
 
-# ============================================================
-# CORS
-# ============================================================
-
-app.add_middleware(
-    CORSMiddleware,
-
-    allow_origins=[
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-
-        # Current Vercel deployment
-        "https://talent-nest-56npd3qgt-gearandcodes-projects.vercel.app",
-
-        # Other known Vercel deployments
-        "https://talent-nest-9f67k7d8q-gearandcodes-projects.vercel.app",
-    ],
-
-    # Allow Vercel preview deployments as well
-    allow_origin_regex=r"^https://[a-zA-Z0-9-]+\.vercel\.app$",
-
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-
-# ============================================================
-# Uploaded resumes
-# ============================================================
-
+# Serve uploaded files (resumes)
 app.mount(
     "/uploads",
     StaticFiles(directory="uploads"),
@@ -67,10 +37,20 @@ app.mount(
 )
 
 
-# ============================================================
-# API ROUTERS
-# ============================================================
+# CORS
+# Production frontend is hosted on Vercel and the backend on Render.
+# Using "*" here allows Vercel preview/production deployments to call
+# the backend without the changing Vercel deployment URL causing CORS errors.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
+
+# Routers
 app.include_router(auth_router)
 app.include_router(candidate_auth_router)
 app.include_router(jobs_router)
@@ -80,10 +60,6 @@ app.include_router(dashboard_router)
 app.include_router(subscriber_router)
 app.include_router(hr_access_router)
 
-
-# ============================================================
-# ROOT
-# ============================================================
 
 @app.get("/")
 def root():
