@@ -573,11 +573,11 @@ function TopNavbar({ candidate, searchQuery, setSearchQuery, onMenuClick, onLogo
             {candidate && (
               <div className="hidden sm:flex items-center gap-3 pl-3 border-l border-[#E2E8F0]">
                 <div className="text-right leading-tight">
-                  <p className="text-sm font-semibold text-[#0F172A]">{candidate.full_name}</p>
+                  <p className="text-sm font-semibold text-[#0F172A]">{candidate.full_name || candidate.name || candidate.email || "Candidate"}</p>
                   <p className="text-xs text-[#475569]">Candidate</p>
                 </div>
                 <div className="w-10 h-10 rounded-xl bg-[#F8FAFC] border border-[#E2E8F0] flex items-center justify-center text-[#0F766E] font-bold">
-                  {candidate.full_name.charAt(0).toUpperCase()}
+                  {(candidate.full_name || candidate.name || candidate.email || "C").charAt(0).toUpperCase()}
                 </div>
               </div>
             )}
