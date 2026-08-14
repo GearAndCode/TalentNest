@@ -17,8 +17,7 @@ from app.routers.candidate import router as candidate_router
 from app.routers.application import router as application_router
 from app.routers.dashboard import router as dashboard_router
 from app.routers.subscriber import router as subscriber_router
-from app.routers.hr_access import router as hr_access_router
-
+from app.routers.hr_access_router import router as hr_access_router
 # Create database tables
 Base.metadata.create_all(bind=engine)
 
