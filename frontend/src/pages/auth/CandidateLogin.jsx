@@ -197,7 +197,9 @@ export default function CandidateLogin() {
       otherStorage.removeItem('candidate_session_email');
 
       // Backend uses /dashboard for the candidate portal.
-      navigate(location.state?.from || '/dashboard', { replace: true });
+      // JobDetails.jsx / ApplyJob.jsx send state.returnTo when redirecting here
+      // (e.g. "Select Your Profile to Apply"); state.from is kept for compatibility.
+      navigate(location.state?.returnTo || location.state?.from || '/dashboard', { replace: true });
     } catch (error) {
       console.error('Candidate login error:', error);
 
@@ -281,7 +283,7 @@ export default function CandidateLogin() {
             otherStorage.removeItem('candidate');
             otherStorage.removeItem('candidate_session_email');
 
-            navigate(location.state?.from || '/dashboard', { replace: true });
+            navigate(location.state?.returnTo || location.state?.from || '/dashboard', { replace: true });
           } catch (error) {
             console.error('Google candidate login error:', error);
             setErrors({
