@@ -37,7 +37,9 @@ app.mount(
 )
 
 
+# ============================================================
 # CORS
+# ============================================================
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -45,14 +47,18 @@ app.add_middleware(
         "http://127.0.0.1:5173",
         "https://talent-nest-9f67k7d8q-gearandcodes-projects.vercel.app",
     ],
+    # Allow all Vercel preview/production deployments
     allow_origin_regex=r"^https://([a-zA-Z0-9-]+\.)*vercel\.app$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["*"],
 )
 
 
+# ============================================================
 # Routers
+# ============================================================
 app.include_router(auth_router)
 app.include_router(candidate_auth_router)
 app.include_router(jobs_router)
@@ -63,6 +69,9 @@ app.include_router(subscriber_router)
 app.include_router(hr_access_router)
 
 
+# ============================================================
+# Root endpoint
+# ============================================================
 @app.get("/")
 def root():
     return {
