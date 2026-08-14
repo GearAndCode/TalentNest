@@ -80,7 +80,25 @@ api.interceptors.request.use((config) => {
 
 const SESSION_KEY = "candidate_session_email";
 function getStoredCandidateEmail() {
-  return localStorage.getItem(SESSION_KEY) || "";
+  return (
+    localStorage.getItem(SESSION_KEY) ||
+    sessionStorage.getItem(SESSION_KEY) ||
+    ""
+  );
+}
+
+function getStoredCandidate() {
+  for (const storage of [localStorage, sessionStorage]) {
+    const raw = storage.getItem("candidate");
+    if (!raw) continue;
+    try {
+      const parsed = JSON.parse(raw);
+      if (parsed && parsed.id) return parsed;
+    } catch {
+      // Ignore malformed stale session data.
+    }
+  }
+  return null;
 }
 
 function splitSkills(value) {
@@ -200,53 +218,48 @@ export default function JobDetails() {
   useEffect(() => {
     (async () => {
       setCandidateChecked(false);
-      if (!sessionEmail) {
-        setCandidateChecked(true);
-        return;
-      }
+      setAlreadyApplied(false);
+
       try {
-        const [candidatesRes, applicationsRes] = await Promise.all([api.get("/candidates"), api.get("/applications")]);
-        const found = (candidatesRes.data || []).find((c) => c.email.toLowerCase() === sessionEmail.toLowerCase());
-        setCandidate(found || null);
-        if (found) {
-          const applied = (applicationsRes.data || []).some((a) => a.candidate_id === found.id && a.job_id === Number(jobId));
+        // Prefer the candidate object saved by the login flow.
+        let activeCandidate = getStoredCandidate();
+
+        // Fall back to the stored session email for older sessions.
+        if (!activeCandidate && sessionEmail) {
+          const candidatesRes = await api.get("/candidates");
+          activeCandidate = (candidatesRes.data || []).find(
+            (c) => String(c.email || "").toLowerCase() === sessionEmail.toLowerCase()
+          );
+        }
+
+        setCandidate(activeCandidate || null);
+
+        if (activeCandidate?.id) {
+          const applicationsRes = await api.get("/applications");
+          const applied = (applicationsRes.data || []).some(
+            (a) => Number(a.candidate_id) === Number(activeCandidate.id) && Number(a.job_id) === Number(jobId)
+          );
           setAlreadyApplied(applied);
         }
       } catch {
-        // Non-fatal — Apply Now will still surface a clear error if attempted.
+        // Keep the page usable; ApplyJob will show the real API error if needed.
       } finally {
         setCandidateChecked(true);
       }
     })();
   }, [sessionEmail, jobId]);
 
-  const handleApply = async () => {
+  const handleApply = () => {
+    // The job-details page should only choose the next step.
+    // Actual application submission happens on the dedicated ApplyJob page.
     if (!candidate) {
-      navigate("/candidate-login");
+      navigate("/candidate-login", {
+        state: { returnTo: `/candidate/apply/${jobId}` },
+      });
       return;
     }
 
-    if (alreadyApplied) return;
-
-    setApplying(true);
-    setApplyError(null);
-
-    try {
-      await api.post("/applications/", {
-        candidate_id: Number(candidate.id),
-        job_id: Number(jobId),
-      });
-      setApplySuccess(true);
-      setAlreadyApplied(true);
-    } catch (err) {
-      const detail = err?.response?.data?.detail;
-      const message = Array.isArray(detail)
-        ? detail.map((d) => d?.msg || JSON.stringify(d)).join(", ")
-        : detail || "Something went wrong while submitting your application.";
-      setApplyError(message);
-    } finally {
-      setApplying(false);
-    }
+    navigate(`/candidate/apply/${jobId}`);
   };
 
   const skills = splitSkills(job?.skills);
