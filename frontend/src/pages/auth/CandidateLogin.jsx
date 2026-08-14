@@ -1,5 +1,5 @@
 import API_BASE_URL from "../../services/api";
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { 
   Mail, 
@@ -93,6 +93,76 @@ export default function CandidateLogin() {
   const GOOGLE_CLIENT_ID =
     import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
 
+  // Hidden container for the official Google button. Google's One Tap
+  // "prompt()" flow is unreliable in production (it is silently skipped
+  // by Chrome's FedCM rollout, third-party-cookie blocking, or if the
+  // user dismissed One Tap before), so we render the real Google button
+  // into an off-screen container and forward clicks from our own
+  // styled button into it. This keeps the existing UI but always opens
+  // Google's standard, reliable sign-in popup.
+  const googleButtonContainerRef = useRef(null);
+  const googleInitializedRef = useRef(false);
+
+  const handleGoogleCredential = async (response) => {
+    try {
+      if (!response?.credential) {
+        throw new Error('Google did not return a credential.');
+      }
+
+      const apiResponse = await fetch(
+        `${API_BASE_URL}/candidate-auth/google`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            credential: response.credential,
+          }),
+        }
+      );
+
+      const data = await apiResponse.json();
+
+      if (!apiResponse.ok) {
+        throw new Error(
+          data?.detail || 'Unable to sign in with Google.'
+        );
+      }
+
+      const storage = rememberMe ? localStorage : sessionStorage;
+
+      storage.setItem('candidate_token', data.access_token);
+      storage.setItem(
+        'candidate',
+        JSON.stringify(data.candidate)
+      );
+      storage.setItem(
+        'candidate_session_email',
+        data.candidate.email
+      );
+
+      const otherStorage = rememberMe
+        ? sessionStorage
+        : localStorage;
+
+      otherStorage.removeItem('candidate_token');
+      otherStorage.removeItem('candidate');
+      otherStorage.removeItem('candidate_session_email');
+
+      navigate(location.state?.from || '/dashboard', { replace: true });
+    } catch (error) {
+      console.error('Google candidate login error:', error);
+      setErrors({
+        email:
+          error?.message ||
+          'Unable to sign in with Google. Please try again.',
+      });
+    } finally {
+      setIsGoogleLoading(false);
+    }
+  };
+
   useEffect(() => {
     if (!GOOGLE_CLIENT_ID) {
       console.error(
@@ -101,22 +171,66 @@ export default function CandidateLogin() {
       return;
     }
 
-    if (window.google?.accounts?.id) return;
+    const initializeGoogle = () => {
+      if (
+        googleInitializedRef.current ||
+        !window.google?.accounts?.id ||
+        !googleButtonContainerRef.current
+      ) {
+        return;
+      }
+
+      window.google.accounts.id.initialize({
+        client_id: GOOGLE_CLIENT_ID,
+        callback: handleGoogleCredential,
+        use_fedcm_for_prompt: true,
+      });
+
+      // Render Google's real, reliable button off-screen. We forward
+      // clicks from the visible "Continue with Google" button below.
+      googleButtonContainerRef.current.innerHTML = '';
+      window.google.accounts.id.renderButton(
+        googleButtonContainerRef.current,
+        { type: 'standard', theme: 'outline', size: 'large', width: 320 }
+      );
+
+      googleInitializedRef.current = true;
+    };
+
+    if (window.google?.accounts?.id) {
+      initializeGoogle();
+      return;
+    }
 
     const existing = document.querySelector(
       'script[src="https://accounts.google.com/gsi/client"]'
     );
 
-    if (existing) return;
+    const script =
+      existing ||
+      (() => {
+        const s = document.createElement('script');
+        s.src = 'https://accounts.google.com/gsi/client';
+        s.async = true;
+        s.defer = true;
+        document.head.appendChild(s);
+        return s;
+      })();
 
-    const script = document.createElement('script');
-    script.src = 'https://accounts.google.com/gsi/client';
-    script.async = true;
-    script.defer = true;
-    document.head.appendChild(script);
+    script.addEventListener('load', initializeGoogle);
+
+    // Poll as a fallback in case the script was already loaded (e.g. from
+    // index.html) before this listener was attached.
+    const pollTimer = window.setInterval(() => {
+      if (window.google?.accounts?.id) {
+        window.clearInterval(pollTimer);
+        initializeGoogle();
+      }
+    }, 150);
 
     return () => {
-      // Do not remove the global Google script because the page may remount.
+      window.clearInterval(pollTimer);
+      script.removeEventListener('load', initializeGoogle);
     };
   }, [GOOGLE_CLIENT_ID]);
 
@@ -197,9 +311,7 @@ export default function CandidateLogin() {
       otherStorage.removeItem('candidate_session_email');
 
       // Backend uses /dashboard for the candidate portal.
-      // JobDetails.jsx / ApplyJob.jsx send state.returnTo when redirecting here
-      // (e.g. "Select Your Profile to Apply"); state.from is kept for compatibility.
-      navigate(location.state?.returnTo || location.state?.from || '/dashboard', { replace: true });
+      navigate(location.state?.from || '/dashboard', { replace: true });
     } catch (error) {
       console.error('Candidate login error:', error);
 
@@ -222,108 +334,43 @@ export default function CandidateLogin() {
     }
 
     setErrors({});
-    setIsGoogleLoading(true);
 
-    const startGooglePrompt = () => {
-      if (!window.google?.accounts?.id) {
-        setIsGoogleLoading(false);
-        setErrors({
-          email:
-            'Google Sign-In could not load. Check your internet connection and Google Client ID.',
-        });
-        return;
+    const clickRealGoogleButton = () => {
+      const container = googleButtonContainerRef.current;
+      const target =
+        container?.querySelector('div[role="button"]') ||
+        container?.firstElementChild;
+
+      if (target) {
+        target.click();
+        return true;
       }
-
-      window.google.accounts.id.initialize({
-        client_id: GOOGLE_CLIENT_ID,
-        callback: async (response) => {
-          try {
-            if (!response?.credential) {
-              throw new Error('Google did not return a credential.');
-            }
-
-            const apiResponse = await fetch(
-              `${API_BASE_URL}/candidate-auth/google`,
-              {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                  credential: response.credential,
-                }),
-              }
-            );
-
-            const data = await apiResponse.json();
-
-            if (!apiResponse.ok) {
-              throw new Error(
-                data?.detail || 'Unable to sign in with Google.'
-              );
-            }
-
-            const storage = rememberMe ? localStorage : sessionStorage;
-
-            storage.setItem('candidate_token', data.access_token);
-            storage.setItem(
-              'candidate',
-              JSON.stringify(data.candidate)
-            );
-            storage.setItem(
-              'candidate_session_email',
-              data.candidate.email
-            );
-
-            const otherStorage = rememberMe
-              ? sessionStorage
-              : localStorage;
-
-            otherStorage.removeItem('candidate_token');
-            otherStorage.removeItem('candidate');
-            otherStorage.removeItem('candidate_session_email');
-
-            navigate(location.state?.returnTo || location.state?.from || '/dashboard', { replace: true });
-          } catch (error) {
-            console.error('Google candidate login error:', error);
-            setErrors({
-              email:
-                error?.message ||
-                'Unable to sign in with Google. Please try again.',
-            });
-          } finally {
-            setIsGoogleLoading(false);
-          }
-        },
-      });
-
-      window.google.accounts.id.prompt((notification) => {
-        if (
-          notification.isNotDisplayed?.() ||
-          notification.isSkippedMoment?.()
-        ) {
-          setIsGoogleLoading(false);
-          setErrors({
-            email:
-              'Google sign-in could not be displayed. Please try again or use email and password.',
-          });
-        }
-      });
+      return false;
     };
 
-    if (window.google?.accounts?.id) {
-      startGooglePrompt();
+    // Fire synchronously (same call stack as the user's click) so the
+    // browser still treats the resulting Google popup as user-initiated.
+    if (clickRealGoogleButton()) {
+      setIsGoogleLoading(true);
+      // Fallback: if the popup is closed/cancelled without a credential,
+      // clear the loading state once the window regains focus.
+      const clearLoadingOnReturn = () => {
+        window.setTimeout(() => setIsGoogleLoading(false), 1500);
+        window.removeEventListener('focus', clearLoadingOnReturn);
+      };
+      window.addEventListener('focus', clearLoadingOnReturn);
       return;
     }
 
-    // Give the GIS script a short time to initialize.
+    // Google's button has not rendered yet (script still loading) -
+    // wait briefly for it, then retry.
+    setIsGoogleLoading(true);
     let attempts = 0;
     const timer = window.setInterval(() => {
       attempts += 1;
 
-      if (window.google?.accounts?.id) {
+      if (clickRealGoogleButton()) {
         window.clearInterval(timer);
-        startGooglePrompt();
       } else if (attempts >= 40) {
         window.clearInterval(timer);
         setIsGoogleLoading(false);
@@ -333,8 +380,6 @@ export default function CandidateLogin() {
         });
       }
     }, 100);
-
-    return () => window.clearInterval(timer);
   };
 
 
@@ -731,6 +776,23 @@ export default function CandidateLogin() {
                       </>
                     )}
                   </button>
+
+                  {/* Off-screen container for Google's official button.
+                      handleGoogleSignIn forwards clicks here so the real,
+                      reliable Google popup opens instead of the flaky
+                      One Tap prompt. Not visible to the user. */}
+                  <div
+                    ref={googleButtonContainerRef}
+                    aria-hidden="true"
+                    style={{
+                      position: 'absolute',
+                      top: '-9999px',
+                      left: '-9999px',
+                      width: '320px',
+                      height: '44px',
+                      overflow: 'hidden',
+                    }}
+                  />
                 </div>
 
               </form>
